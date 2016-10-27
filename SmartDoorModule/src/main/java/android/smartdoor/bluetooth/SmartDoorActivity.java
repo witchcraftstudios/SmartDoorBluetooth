@@ -23,8 +23,8 @@ public class SmartDoorActivity extends AppCompatActivity {
 
     private BluetoothLeService mBluetoothLeService;
     private ProgressDialog mProgressDialog;
-    private TextView mDebugTextView;
     private TextView mStatusTextView;
+    private TextView mDebugTextView;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {

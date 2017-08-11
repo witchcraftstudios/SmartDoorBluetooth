@@ -105,10 +105,6 @@ public class BluetoothLeService extends Service {
             * 133: 0x85 = GATT_ERROR - (Nie można wysłać klucza)
             *
             * */
-
-            //TODO czy rozłączać z serwerem GATT?
-            //pBluetoothGatt.disconnect();
-
             Log.w(TAG, "GATT STATUS:" + pStatus);
             this.onLog("onConnectionStateChange: (GATT STATE: " + pStatus + ")");
             return;
@@ -125,11 +121,6 @@ public class BluetoothLeService extends Service {
             *
             * Jeśli klucz nie został wysłany i nie przekroczono limitu czasu następuje reconnect
             * */
-
-            //TODO czy zwalniać zasoby po każdym rozłączeniu z czytnikiem???
-            //https://www.polidea.com/blog/Emberlight_turns_light_bulbs_into_smart_ones/
-            //pBluetoothGatt.close();
-
             Log.w(TAG, "Rozłączono z serwerem GATT");
             this.onLog("onConnectionStateChange: (STATE_DISCONNECTED)");
         } else {
@@ -160,10 +151,6 @@ public class BluetoothLeService extends Service {
             /*
             * Obsługa błedów
             * */
-
-            //TODO czy robić disconnect?
-            //pBluetoothGatt.disconnect();
-
             Log.w(TAG, "Błąd wykrywania serwisów: " + pStatus);
             this.onLog("Błąd wykrywania serwisów");
         }
@@ -186,14 +173,9 @@ public class BluetoothLeService extends Service {
                 }
             });
         } else {
-
             /*
             * Obsługa błedów
             * */
-
-            //TODO czy robić disconnect?
-            //pBluetoothGatt.disconnect();
-
             Log.w(TAG, "Błąd wysyłania danych: " + pStatus);
             this.onLog("Błąd wysyłania klucza: (" + this.mKey + ")");
         }

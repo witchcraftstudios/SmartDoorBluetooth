@@ -37,7 +37,7 @@
                 android:id="@+id/macEditText"
                 android:layout_width="match_parent"
                 android:layout_height="50dp"
-                android:text="C4:BC:D2:F1:BE:30" />
+                android:text="00:23:A7:4C:19:50" />
 
             <TextView
                 android:layout_width="wrap_content"

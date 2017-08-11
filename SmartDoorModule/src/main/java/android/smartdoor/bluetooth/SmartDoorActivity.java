@@ -171,7 +171,7 @@ public class SmartDoorActivity extends AppCompatActivity {
 
     private void onCreateStatusBarColor() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            final Window mWindow = getWindow();
+            Window mWindow = getWindow();
             mWindow.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
             mWindow.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
             mWindow.setStatusBarColor(getResources().getColor(R.color.colorPrimary));

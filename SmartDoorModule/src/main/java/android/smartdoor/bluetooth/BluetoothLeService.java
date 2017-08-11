@@ -42,7 +42,7 @@ public class BluetoothLeService extends Service {
     /////////////////////////////////////////////////////////////////////////
     // Rozłączenie urządzenia jeśli zostanie przekroczony limit czasu (milisekundy)
     /////////////////////////////////////////////////////////////////////////
-    private static final long TIME_OUT = 100000;
+    private static final long TIME_OUT = 10000;
 
     private final Handler mLogHandler = new Handler(Looper.getMainLooper());
     private final Handler mTimeoutHandler = new Handler();
@@ -152,12 +152,11 @@ public class BluetoothLeService extends Service {
                 final UUID mCharacteristicUuid = UUID.fromString(CHARACTERISTIC_UUID);
                 final BluetoothGattCharacteristic mCharacteristic
                         = mBluetoothGattService.getCharacteristic(mCharacteristicUuid);
-
-                mCharacteristic.setValue(hexStringToByteArray(this.mKey));
+                final byte[] bytes = hexStringToByteArray(this.mKey);
+                mCharacteristic.setValue(bytes);
                 this.mBluetoothGatt.writeCharacteristic(mCharacteristic);
             }
         } else {
-
             /*
             * Obsługa błedów
             * */
@@ -451,8 +450,8 @@ public class BluetoothLeService extends Service {
         return super.onUnbind(intent);
     }
 
-    public class LocalBinder extends Binder {
-        public BluetoothLeService getService() {
+    class LocalBinder extends Binder {
+        BluetoothLeService getService() {
             return BluetoothLeService.this;
         }
     }

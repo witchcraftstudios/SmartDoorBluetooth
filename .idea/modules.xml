@@ -3,6 +3,8 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/SmartDoorBluetooth.iml" filepath="$PROJECT_DIR$/SmartDoorBluetooth.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SmartDoorBluetooth.iml" filepath="$PROJECT_DIR$/SmartDoorBluetooth.iml" />
+      <module fileurl="file://$PROJECT_DIR$/SmartDoorModule/SmartDoorModule.iml" filepath="$PROJECT_DIR$/SmartDoorModule/SmartDoorModule.iml" />
       <module fileurl="file://$PROJECT_DIR$/SmartDoorModule/SmartDoorModule.iml" filepath="$PROJECT_DIR$/SmartDoorModule/SmartDoorModule.iml" />
     </modules>
   </component>

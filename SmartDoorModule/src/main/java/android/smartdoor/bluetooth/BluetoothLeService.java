@@ -96,21 +96,10 @@ public class BluetoothLeService extends Service {
     // Monitorowanie stanu połacząnia
     /////////////////////////////////////////////////////////////////////////
     private void onConnectGattStageChange(@SuppressWarnings("unused") BluetoothGatt pBluetoothGatt, int pStatus, int pNewState) {
-        if (pStatus != BluetoothGatt.GATT_SUCCESS) {
+        Log.w(TAG, "GATT STATUS:" + pStatus + (pStatus == BluetoothGatt.GATT_SUCCESS ? " (GATT_SUCCESS)" : ""));
+        this.onLog("GATT STATUS:" + pStatus + (pStatus == BluetoothGatt.GATT_SUCCESS ? " (GATT_SUCCESS)" : ""));
 
-            /*
-            * Obsługa błędów
-            *
-            * 19: 0x13 = GATT CONN TERMINATE PEER USER (Wystepuje gdy urzytkownik wymusi rozłącznie lub gdy zostanie przekroczony limit czasu)
-            * 133: 0x85 = GATT_ERROR - (Nie można wysłać klucza)
-            *
-            * */
-            Log.w(TAG, "GATT STATUS:" + pStatus);
-            this.onLog("onConnectionStateChange: (GATT STATE: " + pStatus + ")");
-            return;
-        }
-
-        if (pNewState == BluetoothProfile.STATE_CONNECTED) {
+        if (pStatus == BluetoothGatt.GATT_SUCCESS && pNewState == BluetoothProfile.STATE_CONNECTED) {
             this.onLog("onConnectionStateChange: (STATE_CONNECTED)");
             this.onConnectGATTSuccess();
             this.mBluetoothGatt.discoverServices();
@@ -160,6 +149,7 @@ public class BluetoothLeService extends Service {
     // Callback - jeśli "BluetoothGatt.GATT_SUCCESS" klucz został wysłany poprawnie
     /////////////////////////////////////////////////////////////////////////
     private void onCharacteristicWrite(int pStatus) {
+        this.onLog("onCharacteristicWrite BluetoothGattState: " + pStatus + (pStatus == BluetoothGatt.GATT_SUCCESS ? " (GATT_SUCCESS)" : ""));
         if (pStatus == BluetoothGatt.GATT_SUCCESS) {
             this.onLog("Klucz został wysłany: (" + this.mKey + ")");
             this.mTimeoutHandler.removeCallbacksAndMessages(null);
@@ -266,21 +256,6 @@ public class BluetoothLeService extends Service {
         }
 
         /*
-        * Próba ponownego połączenia
-        * */
-        if (this.mBluetoothDeviceAddress != null && pAddress.equals(this.mBluetoothDeviceAddress)
-                && this.mBluetoothGatt != null) {
-            final boolean mConnect = this.mBluetoothGatt.connect();
-            if (!mConnect) {
-                this.onLog("Nie można ponownie połączyć z urządzeniem");
-                this.onError("Nie można ponownie połączyć z urządzeniem");
-            } else {
-                this.onCreateTimeOutHandler();
-            }
-            return;
-        }
-
-        /*
         * Wyszukiwanie urządzenia zewnętrznego
         * */
         BluetoothDevice mDevice;
@@ -370,6 +345,7 @@ public class BluetoothLeService extends Service {
         }
 
         this.mBluetoothGatt.disconnect();
+        this.close();
     }
 
     /////////////////////////////////////////////////////////////////////////

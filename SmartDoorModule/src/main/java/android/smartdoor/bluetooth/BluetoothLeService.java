@@ -16,395 +16,302 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.util.Log;
 
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class BluetoothLeService extends Service {
 
-    /////////////////////////////////////////////////////////////////////////
-    // GIST - https://gist.github.com/AndroidStudio/06c3438d38407251a305f99aab280ae2
-    /////////////////////////////////////////////////////////////////////////
-
-    @SuppressWarnings("unused")
-    private static final String TAG = BluetoothLeService.class.getSimpleName();
-
-    /////////////////////////////////////////////////////////////////////////
-    // UUID serwisu (Serwis z charakterystyką klucza)
-    /////////////////////////////////////////////////////////////////////////
+    /**
+     * Serwis z charakterystyką
+     */
     private final static String SERVICE_UUID = "000018f1-0000-1000-8000-00805f9b34fb";
 
-    /////////////////////////////////////////////////////////////////////////
-    // UUID charakterystyki (Charakterystyka do której będzie zapisywany klucz)
-    /////////////////////////////////////////////////////////////////////////
+    /*
+    * Charakterystyka do zapisu
+    * */
     private final static String CHARACTERISTIC_UUID = "000000F1-0000-1000-8000-00805f9b34fb";
 
-    /////////////////////////////////////////////////////////////////////////
-    // Rozłączenie urządzenia jeśli zostanie przekroczony limit czasu (milisekundy)
-    /////////////////////////////////////////////////////////////////////////
-    private static final long TIME_OUT = 10000;
+    /*
+    * Bluetooth timeout
+    * */
+    private final static long CONNECTION_TIMEOUT = TimeUnit.SECONDS.toMillis(20);
 
-    private final Handler mLogHandler = new Handler(Looper.getMainLooper());
-    private final Handler mTimeoutHandler = new Handler();
-    private final IBinder mIBinder = new LocalBinder();
+    private final Handler logHandler = new Handler(Looper.getMainLooper());
+    private final Handler timeoutHandler = new Handler();
+    private final IBinder iBinder = new LocalBinder();
 
-    private BluetoothListener mBluetoothListener = null;
-    private BluetoothManager mBluetoothManager = null;
-    private BluetoothAdapter mBluetoothAdapter = null;
-    private BluetoothGatt mBluetoothGatt = null;
+    private BluetoothListener bluetoothListener;
+    private BluetoothAdapter bluetoothAdapter;
+    private BluetoothGatt bluetoothGatt;
 
-    /////////////////////////////////////////////////////////////////////////
-    // Czy serwis jest w trakcie wysyłania klucza
-    /////////////////////////////////////////////////////////////////////////
-    private boolean mServiceRunning = false;
+    private String key;
 
-    /////////////////////////////////////////////////////////////////////////
-    // Adres urządznienia zewnętrznego do którego łączy sie telefon/tablet
-    /////////////////////////////////////////////////////////////////////////
-    private String mBluetoothDeviceAddress;
+    public boolean initialize() {
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            return false;
+        }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Klucz wysyłany do serwera
-    /////////////////////////////////////////////////////////////////////////
-    private String mKey;
+        BluetoothManager mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        if (mBluetoothManager == null) {
+            return false;
+        }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Serwer GATT - Callbacks
-    /////////////////////////////////////////////////////////////////////////
+        bluetoothAdapter = mBluetoothManager.getAdapter();
+        return !(bluetoothAdapter == null || !bluetoothAdapter.isEnabled());
+    }
+
+    public void onConnectGATT(final String address, String pKey) {
+        createConnectionTimeout();
+        log("Connecting to device: " + address);
+
+        bluetoothListener.onConnectDevice();
+        key = pKey;
+
+        if (bluetoothGatt != null) {
+            if (bluetoothGatt.connect()) {
+                return;
+            }
+        }
+
+        bluetoothGatt = getBleDevice(address).connectGatt(this, true, this.mBluetoothGattCallback);
+    }
+
     private final BluetoothGattCallback mBluetoothGattCallback = new BluetoothGattCallback() {
 
         @Override
-        public void onConnectionStateChange(final BluetoothGatt pBluetoothGatt, int pStatus, int pNewState) {
-            super.onConnectionStateChange(pBluetoothGatt, pStatus, pNewState);
-            BluetoothLeService.this.onConnectGattStageChange(pBluetoothGatt, pStatus, pNewState);
+        public void onConnectionStateChange(BluetoothGatt bluetoothGatt, int status, int newState) {
+            super.onConnectionStateChange(bluetoothGatt, status, newState);
+            log("onConnectionStateChange: " + getGattStatus(status));
+            log("onConnectionStateChange: " + getNewStateName(newState));
+            if (status == BluetoothGatt.GATT_SUCCESS && newState == BluetoothProfile.STATE_CONNECTED) {
+                onConnected();
+                bluetoothGatt.discoverServices();
+            } else {
+                disconnect();
+            }
         }
 
         @Override
-        public void onServicesDiscovered(BluetoothGatt pBluetoothGatt, int pStatus) {
-            super.onServicesDiscovered(pBluetoothGatt, pStatus);
-            BluetoothLeService.this.onServicesDiscovered(pStatus);
+        public void onServicesDiscovered(BluetoothGatt bluetoothGatt, int status) {
+            super.onServicesDiscovered(bluetoothGatt, status);
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                log("Serwis wykryty: " + getGattStatus(status));
+
+                BluetoothGattService mBluetoothGattService = bluetoothGatt.getService(UUID.fromString(SERVICE_UUID));
+                BluetoothGattCharacteristic mCharacteristic = mBluetoothGattService.getCharacteristic(UUID.fromString(CHARACTERISTIC_UUID));
+                mCharacteristic.setValue(hexStringToByteArray(key));
+                bluetoothGatt.writeCharacteristic(mCharacteristic);
+            } else {
+                log("Błąd wykrywania serwisów: " + getGattStatus(status));
+                //  onError("Błąd wykrywania serwisów: " + getGattStatus(status));
+                //TODO disconnect?
+            }
         }
 
         @Override
-        public void onCharacteristicWrite(BluetoothGatt pBluetoothGatt, BluetoothGattCharacteristic pBluetoothGattCharacteristic, int pStatus) {
-            super.onCharacteristicWrite(pBluetoothGatt, pBluetoothGattCharacteristic, pStatus);
-            BluetoothLeService.this.onCharacteristicWrite(pStatus);
+        public void onCharacteristicWrite(BluetoothGatt bluetoothGatt, BluetoothGattCharacteristic characteristic, int status) {
+            super.onCharacteristicWrite(bluetoothGatt, characteristic, status);
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                log("Klucz wysłany: " + getGattStatus(status));
+                onKeySend();
+            } else {
+                log("Błąd wysyłania klucza: " + getGattStatus(status));
+                //    onError("Błąd wysyłania klucza: " + getGattStatus(status));
+            }
+            disconnect();
         }
     };
 
-    /////////////////////////////////////////////////////////////////////////
-    // Monitorowanie stanu połacząnia
-    /////////////////////////////////////////////////////////////////////////
-    private void onConnectGattStageChange(@SuppressWarnings("unused") BluetoothGatt pBluetoothGatt, int pStatus, int pNewState) {
-        Log.w(TAG, "GATT STATUS:" + pStatus + (pStatus == BluetoothGatt.GATT_SUCCESS ? " (GATT_SUCCESS)" : ""));
-        this.onLog("GATT STATUS:" + pStatus + (pStatus == BluetoothGatt.GATT_SUCCESS ? " (GATT_SUCCESS)" : ""));
-
-        if (pStatus == BluetoothGatt.GATT_SUCCESS && pNewState == BluetoothProfile.STATE_CONNECTED) {
-            this.onLog("onConnectionStateChange: (STATE_CONNECTED)");
-            this.onConnectGATTSuccess();
-            this.mBluetoothGatt.discoverServices();
-        } else if (pNewState == BluetoothProfile.STATE_DISCONNECTED) {
-
-            /*
-            * Urządzenie rozłączone
-            *
-            * Jeśli klucz nie został wysłany i nie przekroczono limitu czasu następuje reconnect
-            * */
-            Log.w(TAG, "Rozłączono z serwerem GATT");
-            this.onLog("onConnectionStateChange: (STATE_DISCONNECTED)");
-        } else {
-            Log.w(TAG, "NEW STATE: " + pNewState);
-            this.onLog("onConnectionStateChange: (STATE: " + pNewState + ")");
-        }
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Callback - serwisy wykryte
-    /////////////////////////////////////////////////////////////////////////
-    private void onServicesDiscovered(int pStatus) {
-        if (pStatus == BluetoothGatt.GATT_SUCCESS) {
-            final UUID mServiceUuid = UUID.fromString(SERVICE_UUID);
-            final BluetoothGattService mBluetoothGattService = this.mBluetoothGatt.getService(mServiceUuid);
-            if (mBluetoothGattService != null) {
-                this.onLog("Serwis wykryty: (" + mServiceUuid.toString() + ")");
-                this.onLog("Wysyłanie klucza");
-
-                final UUID mCharacteristicUuid = UUID.fromString(CHARACTERISTIC_UUID);
-                final BluetoothGattCharacteristic mCharacteristic
-                        = mBluetoothGattService.getCharacteristic(mCharacteristicUuid);
-                final byte[] bytes = hexStringToByteArray(this.mKey);
-                mCharacteristic.setValue(bytes);
-                this.mBluetoothGatt.writeCharacteristic(mCharacteristic);
-            }
-        } else {
-            /*
-            * Obsługa błedów
-            * */
-            Log.w(TAG, "Błąd wykrywania serwisów: " + pStatus);
-            this.onLog("Błąd wykrywania serwisów");
-        }
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Callback - jeśli "BluetoothGatt.GATT_SUCCESS" klucz został wysłany poprawnie
-    /////////////////////////////////////////////////////////////////////////
-    private void onCharacteristicWrite(int pStatus) {
-        this.onLog("onCharacteristicWrite BluetoothGattState: " + pStatus + (pStatus == BluetoothGatt.GATT_SUCCESS ? " (GATT_SUCCESS)" : ""));
-        if (pStatus == BluetoothGatt.GATT_SUCCESS) {
-            this.onLog("Klucz został wysłany: (" + this.mKey + ")");
-            this.mTimeoutHandler.removeCallbacksAndMessages(null);
-            this.mLogHandler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (BluetoothLeService.this.mBluetoothListener != null) {
-                        BluetoothLeService.this.mBluetoothListener.onSendKeySuccess();
-                    }
-                    BluetoothLeService.this.disconnect();
-                }
-            });
-        } else {
-            /*
-            * Obsługa błedów
-            * */
-            Log.w(TAG, "Błąd wysyłania danych: " + pStatus);
-            this.onLog("Błąd wysyłania klucza: (" + this.mKey + ")");
-        }
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Logi bluetooth
-    /////////////////////////////////////////////////////////////////////////
-    private void onLog(final String pMessage) {
-        this.mLogHandler.post(new Runnable() {
+    private void onConnected() {
+        logHandler.post(new Runnable() {
             @Override
             public void run() {
-                if (BluetoothLeService.this.mBluetoothListener != null) {
-                    BluetoothLeService.this.mBluetoothListener.onLog(pMessage);
+                if (BluetoothLeService.this.bluetoothListener != null) {
+                    BluetoothLeService.this.bluetoothListener.onConnectGATT();
                 }
             }
         });
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Callback - error
-    /////////////////////////////////////////////////////////////////////////
+    private void onKeySend() {
+        timeoutHandler.removeCallbacksAndMessages(null);
+        logHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (BluetoothLeService.this.bluetoothListener != null) {
+                    BluetoothLeService.this.bluetoothListener.onSendKeySuccess();
+                }
+            }
+        });
+    }
+
     private void onError(final String pError) {
-        this.mLogHandler.post(new Runnable() {
+        logHandler.post(new Runnable() {
             @Override
             public void run() {
-                if (BluetoothLeService.this.mBluetoothListener != null) {
-                    BluetoothLeService.this.mBluetoothListener.onError(pError);
+                if (BluetoothLeService.this.bluetoothListener != null) {
+                    BluetoothLeService.this.bluetoothListener.onError(pError);
+                }
+            }
+        });
+        disconnect();
+    }
+
+    private void log(final String pMessage) {
+        logHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (BluetoothLeService.this.bluetoothListener != null) {
+                    BluetoothLeService.this.bluetoothListener.onLog(pMessage);
                 }
             }
         });
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Callback - połączono z serwerem GATT
-    /////////////////////////////////////////////////////////////////////////
-    private void onConnectGATTSuccess() {
-        this.mLogHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (BluetoothLeService.this.mBluetoothListener != null) {
-                    BluetoothLeService.this.mBluetoothListener.onConnectGATT();
-                }
-            }
-        });
+    private void createConnectionTimeout() {
+        timeoutHandler.removeCallbacksAndMessages(null);
+        timeoutHandler.postDelayed(timeoutRunnable, CONNECTION_TIMEOUT);
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Inicjalizacja - Bluetooth listener
-    /////////////////////////////////////////////////////////////////////////
+    private final Runnable timeoutRunnable = new Runnable() {
+        @Override
+        public void run() {
+            bluetoothListener.onForceDisconnect("FAILED\nTIMEOUT");
+            disconnect();
+        }
+    };
+
     public void setBluetoothListener(BluetoothListener pBluetoothListener) {
-        this.mBluetoothListener = pBluetoothListener;
+        bluetoothListener = pBluetoothListener;
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Zamiana HEX na tablice bajtów
-    /////////////////////////////////////////////////////////////////////////
+    public BluetoothAdapter getBluetoothAdapter() {
+        return bluetoothAdapter;
+    }
+
+    public BluetoothDevice getBleDevice(String address) {
+        BluetoothDevice bluetoothDevice = bluetoothAdapter.getRemoteDevice(address);
+        getDeviceType(bluetoothDevice.getType());
+        return bluetoothDevice;
+    }
+
     private byte[] hexStringToByteArray(String value) {
-        final byte result[] = new byte[value.length() / 2];
-        final char enc[] = value.toCharArray();
+        byte result[] = new byte[value.length() / 2];
+        char enc[] = value.toCharArray();
         for (int i = 0; i < enc.length; i += 2) {
             result[i / 2] = (byte) Integer.parseInt(String.valueOf(enc[i]) + enc[i + 1], 16);
         }
         return result;
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Łączenie z serwerem GATT
-    /////////////////////////////////////////////////////////////////////////
-    public void onConnectGATT(final String pAddress, String pKey) {
-        if (this.isServiceRunning()) {
-            return;
+    public String getNewStateName(int newState) {
+        String status;
+        switch (newState) {
+            case BluetoothProfile.STATE_CONNECTED:
+                status = "STATE_CONNECTED";
+                break;
+            case BluetoothProfile.STATE_CONNECTING:
+                status = "STATE_CONNECTING";
+                break;
+            case BluetoothProfile.STATE_DISCONNECTED:
+                status = "STATE_DISCONNECTED";
+                break;
+            case BluetoothProfile.STATE_DISCONNECTING:
+                status = "STATE_DISCONNECTING";
+                break;
+            default:
+                status = "STATE_UNKNOWN";
+                break;
         }
-
-        this.mServiceRunning = true;
-        this.mKey = pKey;
-
-        this.onLog("Lączenie z urządzeniem: (" + pAddress + ")");
-
-        if (this.mBluetoothListener != null) {
-            this.mBluetoothListener.onConnectDevice();
-        }
-
-        if (this.mBluetoothAdapter == null) {
-            this.onLog("Nie można połączyć z urządzeniem");
-            this.onError("Nie można połączyć z urządzeniem");
-            return;
-        }
-
-        /*
-        * Wyszukiwanie urządzenia zewnętrznego
-        * */
-        BluetoothDevice mDevice;
-        try {
-            mDevice = this.mBluetoothAdapter.getRemoteDevice(pAddress);
-            if (mDevice == null) {
-                this.onLog("Nie odnaleziono urządzenia");
-                this.onError("Nie odnaleziono urządzenia");
-                return;
-            }
-        } catch (Exception e) {
-            this.onLog("Nie można połączyć z urządzeniem");
-            this.onError("Nie można połączyć z urządzeniem");
-            e.printStackTrace();
-            return;
-        }
-
-        /*
-        * Inicjalizacja funkcji timeout
-        * */
-        this.onCreateTimeOutHandler();
-
-        /*
-        * Łączenie z urządzeniem zewnętrznym
-        * */
-        this.mBluetoothGatt = mDevice.connectGatt(this, true, this.mBluetoothGattCallback);
-        this.mBluetoothDeviceAddress = pAddress;
+        return status + "(" + newState + ")";
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Czy serwis dostępny
-    /////////////////////////////////////////////////////////////////////////
-    private boolean isServiceRunning() {
-        return this.mServiceRunning;
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Limit czasu na wysłanie klucza
-    /////////////////////////////////////////////////////////////////////////
-    private void onCreateTimeOutHandler() {
-        this.mTimeoutHandler.removeCallbacksAndMessages(null);
-        this.mTimeoutHandler.postDelayed(this.mTimeOutRunnable, TIME_OUT);
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Timeout handler
-    /////////////////////////////////////////////////////////////////////////
-    private final Runnable mTimeOutRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (mBluetoothListener != null) {
-                mBluetoothListener.onForceDisconnect("FAILED\nTIMEOUT");
-            }
-            BluetoothLeService.this.disconnect();
+    /**
+     * Bluetooth Basic Rate/Enhanced Data Rate (BR/EDR) is typically used for relatively short-range, continuous wireless connection such as streaming audio to headsets.
+     * <p>
+     * Bluetooth low energy (LE) is designed to use short bursts of longer-range radio connection,
+     * making it ideal for Internet of Things (IoT) applications that don’t require continuous connection.
+     * These apps can often run on just one coin cell and still have a relatively long battery life.
+     *
+     * @param type
+     * @return
+     */
+    public String getDeviceType(int type) {
+        switch (type) {
+            case BluetoothDevice.DEVICE_TYPE_DUAL:
+                return "DEVICE_TYPE_DUAL";
+            case BluetoothDevice.DEVICE_TYPE_CLASSIC:
+                return "DEVICE_TYPE_CLASSIC";
+            case BluetoothDevice.DEVICE_TYPE_LE:
+                return "DEVICE_TYPE_LE";
+            default:
+                return "DEVICE_TYPE_UNKNOWN";
         }
-    };
+    }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Wymuszone rozłączenie z serwerem GATT
-    /////////////////////////////////////////////////////////////////////////
+    /**
+     * https://android.googlesource.com/platform/external/bluetooth/bluedroid/+/android-5.1.1_r13/stack/include/gatt_api.h
+     *
+     * @param gattStatus
+     * @return
+     */
+    public String getGattStatus(int gattStatus) {
+        String status;
+        switch (gattStatus) {
+            case BluetoothGatt.GATT_SUCCESS:
+                status = "GATT_SUCCESS";
+                break;
+            case BluetoothGatt.GATT_FAILURE:
+                /* A GATT operation failed*/
+                status = "GATT_FAILURE";
+                break;
+            case 133:
+                status = "GATT_ERROR";
+                break;
+            case 129:
+                status = "GATT_INTERNAL_ERROR";
+                break;
+            case 19:
+                status = "GATT_RSP_WRITE";
+                break;
+            default:
+                status = "GATT STATUS";
+                break;
+        }
+        return status + "(" + gattStatus + ")";
+    }
+
     public void onForceDisconnect() {
-        if (this.mBluetoothListener != null) {
-            this.mBluetoothListener.onForceDisconnect("FAILED\nCANCELLED");
-        }
-        this.disconnect();
+        bluetoothListener.onForceDisconnect("FAILED\nCANCELLED");
+        disconnect();
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Rozłączenie z serwerem GATT
-    /////////////////////////////////////////////////////////////////////////
     public void disconnect() {
-        this.mTimeoutHandler.removeCallbacksAndMessages(null);
-        if (this.mBluetoothListener != null) {
-            this.mBluetoothListener.onDisconnect();
-        }
-
-        this.mLogHandler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                BluetoothLeService.this.mServiceRunning = false;
-            }
-        }, 2000);
-
-        if (this.mBluetoothAdapter == null || this.mBluetoothGatt == null) {
-            this.onLog("Wystąpił błąd podczas rozłączania");
+        timeoutHandler.removeCallbacksAndMessages(null);
+        bluetoothListener.onDisconnect();
+        if (bluetoothAdapter == null || bluetoothGatt == null) {
             return;
         }
 
-        this.mBluetoothGatt.disconnect();
-        this.close();
+        bluetoothGatt.disconnect();
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Inicjalizacja adaptera bluetooth
-    /////////////////////////////////////////////////////////////////////////
-    public boolean initialize() {
-        if (!this.isBluetoothLeSupported()) {
-            return false;
-        }
-
-        /*
-        * Bluetooth manager
-        * */
-        if (this.mBluetoothManager == null) {
-            this.mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-            if (this.mBluetoothManager == null) {
-                return false;
-            }
-        }
-
-        /*
-        * Bluetooth adapter
-        * */
-        this.mBluetoothAdapter = this.mBluetoothManager.getAdapter();
-        return !(this.mBluetoothAdapter == null || !this.mBluetoothAdapter.isEnabled());
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Czy urządzenie użytkownika wspiera bluetooth
-    /////////////////////////////////////////////////////////////////////////
-    private boolean isBluetoothLeSupported() {
-        return this.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
-    }
-
-    /////////////////////////////////////////////////////////////////////////
-    // Rozłączenie z serwerem GATT oraz zwonienie zasobów serwera GATT
-    /////////////////////////////////////////////////////////////////////////
     public void close() {
-        if (this.mBluetoothGatt == null) {
+        if (bluetoothGatt == null) {
             return;
         }
-        this.mBluetoothGatt.close();
-        this.mBluetoothGatt = null;
+        bluetoothGatt.close();
+        bluetoothGatt = null;
     }
 
-    /////////////////////////////////////////////////////////////////////////
-    // Bindowanie z serwisem
-    /////////////////////////////////////////////////////////////////////////
     @Override
     public IBinder onBind(final Intent intent) {
-        return this.mIBinder;
+        return iBinder;
     }
 
     @Override
     public boolean onUnbind(final Intent intent) {
-        /*
-        * Rozłączenie z serwisem, rozłączenie z bluetooth
-        * */
-        this.close();
         return super.onUnbind(intent);
     }
 
@@ -412,5 +319,12 @@ public class BluetoothLeService extends Service {
         BluetoothLeService getService() {
             return BluetoothLeService.this;
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        disconnect();
+        close();
     }
 }

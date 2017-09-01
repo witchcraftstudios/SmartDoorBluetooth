@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="ADRES MAC CZYTNIKA:"
+        android:textColor="#000"
+        android:textSize="10dp" />
+
+    <EditText
+        android:id="@+id/macEditText"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="00:23:A7:4C:19:50" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="KLUCZ:"
+        android:textColor="#000"
+        android:textSize="10dp" />
+
+    <EditText
+        android:id="@+id/keyEditText"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="57979CC5" />
+
+    <Button
+        android:onClick="onConfirmClick"
+        android:text="OK"
+        android:layout_width="match_parent"
+        android:layout_height="50dp" />
+
+</LinearLayout>

@@ -30,7 +30,7 @@
             android:id="@+id/statusTextView"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_above="@+id/keyImageButton"
+            android:layout_above="@+id/progressBar"
             android:layout_centerHorizontal="true"
             android:textSize="12dp" />
 

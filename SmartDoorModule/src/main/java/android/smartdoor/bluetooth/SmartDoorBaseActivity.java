@@ -5,7 +5,6 @@ import android.content.ComponentName;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -33,6 +32,9 @@ public class SmartDoorBaseActivity extends AppCompatActivity {
     public String macAddress;
 
     private ProgressBar progressBar;
+
+    private int failure;
+    private int success;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -101,15 +103,19 @@ public class SmartDoorBaseActivity extends AppCompatActivity {
 
         @Override
         public void onError(String pError) {
-            Toast.makeText(SmartDoorBaseActivity.this, pError, Toast.LENGTH_LONG).show();
-            statusTextView.setTextColor(Color.RED);
-            statusTextView.setText("FAILED");
+            failure++;
+            statusTextView.setText("SUCCESS " + success + "/" + failure + " ERROR");
         }
 
         @Override
         public void onSendKeySuccess() {
-            statusTextView.setTextColor(Color.GREEN);
-            statusTextView.setText("SUCCESS");
+            if (mStringBuilder.length() > 4000) {
+                mStringBuilder.setLength(0);
+                statusTextView.setText("");
+            }
+
+            success++;
+            statusTextView.setText("SUCCESS " + success + "/" + failure + " ERROR");
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -121,7 +127,6 @@ public class SmartDoorBaseActivity extends AppCompatActivity {
 
         @Override
         public void onForceDisconnect(String pMessage) {
-            statusTextView.setTextColor(Color.RED);
             statusTextView.setText(pMessage);
         }
     };
@@ -193,6 +198,7 @@ public class SmartDoorBaseActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        dismissSearchDialog();
         unbindService(mServiceConnection);
         stopService(new Intent(this, BluetoothLeService.class));
     }

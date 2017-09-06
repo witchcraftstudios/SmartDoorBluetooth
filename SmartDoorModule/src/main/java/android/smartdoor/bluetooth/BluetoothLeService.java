@@ -46,6 +46,7 @@ public class BluetoothLeService extends Service {
     private BluetoothGatt bluetoothGatt;
 
     private String key;
+    private boolean autoDisconnect = true;
 
     public boolean initialize() {
         if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
@@ -62,6 +63,8 @@ public class BluetoothLeService extends Service {
     }
 
     public void onConnectGATT(final String address, String pKey) {
+        autoDisconnect = false;
+
         createConnectionTimeout();
         log("Connecting to device: " + address);
 
@@ -88,7 +91,13 @@ public class BluetoothLeService extends Service {
                 onConnected();
                 bluetoothGatt.discoverServices();
             } else {
-                disconnect();
+                if (status != BluetoothGatt.GATT_SUCCESS) {
+                    onError("onConnectionStateChange: " + getGattStatus(status));
+                }
+
+                if (autoDisconnect) {
+                    disconnect();
+                }
             }
         }
 
@@ -104,7 +113,7 @@ public class BluetoothLeService extends Service {
                 bluetoothGatt.writeCharacteristic(mCharacteristic);
             } else {
                 log("Błąd wykrywania serwisów: " + getGattStatus(status));
-                //  onError("Błąd wykrywania serwisów: " + getGattStatus(status));
+                onError("Błąd wykrywania serwisów: " + getGattStatus(status));
                 //TODO disconnect?
             }
         }
@@ -114,12 +123,13 @@ public class BluetoothLeService extends Service {
             super.onCharacteristicWrite(bluetoothGatt, characteristic, status);
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 log("Klucz wysłany: " + getGattStatus(status));
+                autoDisconnect = true;
                 onKeySend();
             } else {
                 log("Błąd wysyłania klucza: " + getGattStatus(status));
-                //    onError("Błąd wysyłania klucza: " + getGattStatus(status));
+                onError("Błąd wysyłania klucza: " + getGattStatus(status));
             }
-            disconnect();
+            //TODO disconnect?
         }
     };
 
@@ -155,7 +165,6 @@ public class BluetoothLeService extends Service {
                 }
             }
         });
-        disconnect();
     }
 
     private void log(final String pMessage) {
@@ -282,12 +291,8 @@ public class BluetoothLeService extends Service {
         return status + "(" + gattStatus + ")";
     }
 
-    public void onForceDisconnect() {
-        bluetoothListener.onForceDisconnect("FAILED\nCANCELLED");
-        disconnect();
-    }
-
     public void disconnect() {
+        autoDisconnect = true;
         timeoutHandler.removeCallbacksAndMessages(null);
         bluetoothListener.onDisconnect();
         if (bluetoothAdapter == null || bluetoothGatt == null) {

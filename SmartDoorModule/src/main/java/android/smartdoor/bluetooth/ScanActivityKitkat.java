@@ -23,7 +23,6 @@ public class ScanActivityKitkat extends SmartDoorBaseActivity implements Bluetoo
     @Override
     public void onLeScan(BluetoothDevice device, int rssi, byte[] scanRecord) {
         if (device.getAddress().equals(macAddress)) {
-            //stopScan();
             deviceFound();
         }
     }

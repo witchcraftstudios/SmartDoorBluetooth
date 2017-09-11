@@ -64,12 +64,7 @@ public class SettingsActivity extends AppCompatActivity {
             return;
         }
 
-        Intent intent;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            intent = new Intent(this, ScanActivityLollipop.class);
-        } else {
-            intent = new Intent(this, ScanActivityKitkat.class);
-        }
+        Intent intent = new Intent(this, ScanActivityKitkat.class);
         intent.putExtra(MAC, mac);
         intent.putExtra(KEY, key);
         startActivity(intent);
